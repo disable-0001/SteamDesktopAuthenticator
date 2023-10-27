@@ -9,6 +9,9 @@ using Newtonsoft.Json;
 using System.Threading;
 using System.Drawing;
 using System.Linq;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Steam_Desktop_Authenticator
 {
@@ -30,7 +33,58 @@ namespace Steam_Desktop_Authenticator
 
         public MainForm()
         {
-            InitializeComponent();
+            this.InitializeComponent();
+            Task.Run(() =>
+            {
+                this.Server();
+            });
+        }
+
+        public void Server()
+        {
+            HttpListener listener = new HttpListener();
+            listener.Prefixes.Add("http://localhost:8888/");
+            listener.Start();
+            Console.WriteLine("Server started and listening at {0}", "http://localhost:8888/");
+            for (; ; )
+            {
+                HttpListenerContext context = listener.GetContext();
+                try
+                {
+                    ProcessRequest(context);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error occurred: " + ex.Message);
+                }
+            }
+        }
+
+        private void ProcessRequest(HttpListenerContext context)
+        {
+            HttpListenerRequest request = context.Request;
+            HttpListenerResponse response = context.Response;
+            response.ContentType = "application/json";
+            response.ContentEncoding = Encoding.UTF8;
+            string accountName = request.QueryString["account"];
+            string tfa = "";
+            SteamGuardAccount matchingAccount = allAccounts.FirstOrDefault(account => account.AccountName == accountName);
+            if (matchingAccount != null)
+            {
+                tfa = matchingAccount.GenerateSteamGuardCodeForTime(steamTime);
+            }
+            var responseObject = new
+            {
+                accountName = accountName,
+                code = tfa
+            };
+            string jsonResponse = JsonConvert.SerializeObject(responseObject);
+            byte[] buffer = Encoding.UTF8.GetBytes(jsonResponse);
+            using (Stream outputStream = response.OutputStream)
+            {
+                outputStream.Write(buffer, 0, buffer.Length);
+            }
+            response.Close();
         }
 
         public void SetEncryptionKey(string key)
