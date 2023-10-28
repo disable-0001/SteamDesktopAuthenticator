@@ -9,9 +9,9 @@ using Newtonsoft.Json;
 using System.Threading;
 using System.Drawing;
 using System.Linq;
-using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
 
 namespace Steam_Desktop_Authenticator
 {
@@ -68,22 +68,39 @@ namespace Steam_Desktop_Authenticator
             response.ContentEncoding = Encoding.UTF8;
             string accountName = request.QueryString["account"];
             string tfa = "";
+            CookieContainer cookies = new CookieContainer();
             SteamGuardAccount matchingAccount = allAccounts.FirstOrDefault(account => account.AccountName == accountName);
             if (matchingAccount != null)
             {
                 tfa = matchingAccount.GenerateSteamGuardCodeForTime(steamTime);
+                cookies = matchingAccount.Session.GetCookies();
+                StringBuilder sb = new StringBuilder();
+       
+                CookieCollection cookieCollection = cookies.GetCookies(new Uri("http://steamcommunity.com"));
+
+                foreach
+                (Cookie cookie in cookieCollection)
+                {
+                    sb.Append($"{cookie.Name}={cookie.Value}; ");
+                    Console.WriteLine($"{cookie.Name}");
+                }
+
+                var responseObject = new
+                {
+                    accountName = accountName,
+                    code = tfa,
+                    cookie = sb.ToString(),
+                };
+
+                string jsonResponse = JsonConvert.SerializeObject(responseObject);
+                byte[] buffer = Encoding.UTF8.GetBytes(jsonResponse);
+                using (Stream outputStream = response.OutputStream)
+                {
+                    outputStream.Write(buffer, 0, buffer.Length);
+                }
             }
-            var responseObject = new
-            {
-                accountName = accountName,
-                code = tfa
-            };
-            string jsonResponse = JsonConvert.SerializeObject(responseObject);
-            byte[] buffer = Encoding.UTF8.GetBytes(jsonResponse);
-            using (Stream outputStream = response.OutputStream)
-            {
-                outputStream.Write(buffer, 0, buffer.Length);
-            }
+
+   
             response.Close();
         }
 
